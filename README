@@ -2,6 +2,158 @@ This project implements the following paper for a Byzantine tolerant replicated 
 Byzantine Chain Replication - Cornell Computer Science at www.cs.cornell.edu/~ns672/publications/2012OPODIS.pdf
 
 
+------------------------------------------------------------
+Our replicated object is a dictionary.
+OBJECT STATE AND OPERATIONS
+the implementation supports a dictionary object (stored only in memory) that maps strings to strings with the following operations:
+
+put(key, val)
+get(key)
+slice(key, slice)
+append(key, val)
+
+put and get have their usual meanings.  put always returns 'OK', to indicate that the operation succeeded.  if key is not present in the
+dictionary, get(key) returns the empty string. slice(key, slice) updates the value associated with key from its current value val to 
+val[slice] and returns 'OK', if key is present in the dictionary and the attempted slice is valid (e.g., indices are in range), 
+otherwise it performs no updates and returns 'fail'.  append(key,val) appends val to the value currently associated with key and 
+returns 'OK', if key is present in the dictionary, otherwise it performs no updates and returns 'fail'.
+------------------------------------------------------------
+HASHES AND SIGNATURES
+
+We used PyNaCl, a Python interface to the libsodium cryptography library, for cryptographic hashes and signatures.  i
+
+https://pypi.python.org/pypi/PyNaCl/
+https://pynacl.readthedocs.io/en/latest/
+------------------------------------------------------------
+
+CONFIGURATION
+all processes read configuration information from a configuration file whose name is specified on the command line.  for simplicity, all
+processes read the same configuration file, and each kind of process ignores irrelevant information. the configuration file contains 
+enough information to specify a test case; thus, a user can run different test cases simply by supplying different configuration files.  this includes specification of the client workload and a failure scenario.
+client workload may be a list of specific requests or pseudorandom.  the former is a semicolon-separated list of invocations of the 4 
+operations listed above; the exact syntax is shown in the example configuration file below.  a pseudorandom workload is specified using 
+the syntax pseudorandom(seed, n), which denotes a sequence containing n pseudorandom requests, with the specified seed for the 
+pseudorandom number generator (for reproducibility).  details of pseudorandom request generation are not standardized: any method that
+generates a diverse sequence of requests is acceptable. a failure scenario is a semicolon-separated set (not a sequence, i.e., the order
+doesn't matter) of trigger,failure pairs for a specified replica.  we do not consider failures of clients or Olympus.  each trigger 
+corresponds to receiving a message of a specified type and has the form message_type(args), as described in detail below. when the event specified by the trigger occurs, the specified failure occurs.  your system should contain fault-injection code that simulates these failures.  try to encapsulate fault-injection code in separate functions as much as possible, to minimize its impact on the readability of the code for the protocol itself.
+required failure triggers are listed below, where c >= 0 and m >= 0, i.e., clients c and received messages m are numbered starting from 0.  this message numbering is done independently by each replica (using an auxiliary data structure) for each message type from each client.  
+the numbering m of each type of message received by a replica should start at 0 for each process.  thus, the counter is reset across
+configurations, because new processes are used in the new configuration.  propating the counter values from one configuration to the
+next is an unnecessary complication and is problematic in the presence of failures.
+-----
+failure triggers:
+client_request(c, m): receipt of m'th request message directly from client c.  requests received directly from client c are numbered 
+separately from requests of client c received via forwarding by other replicas.
+forwarded_request(c, m): receipt of m'th forwarded request message containing a request from client c.
+shuttle(c, m): receipt of m'th shuttle message for a request by client c.
+result_shuttle(c, m): receipt of m'th result-shuttle message for a request by client c.
+wedge_request(m): receipt of m'th wedge-request message.
+new_configuration(m): receipt of m'th new_configuration message from Olympus.  it doesn't matter whether your implementation actually 
+sends a new_configuration message for the initial configuration; either way, m=0 corresponds to the first configuration change 
+after the initial configuration.
+checkpoint(m): receipt of m'th checkpoint message
+completed_checkpoint(m): receipt of m'th completed checkpoint message
+get_running_state(m): receipt of m'th get_running_state message.
+catch_up(m): receipt of m'th catch_up message.
+
+----
+required failures:
+
+change_operation(): in the next outgoing shuttle message, this replica uses get('x') as the operation in its order statement and result 
+statement, regardless of what the operation should be.
+change_result(): in the next outgoing result message (to a client) or result shuttle message, this replica uses the hash of 'OK', 
+instead of the hash of the actual result, in its result statement.
+drop_result_stmt(): in the next outgoing result message (to a client) or result shuttle message, omit the head's result statement from 
+the result proof.
+crash(): immediately call logging.shutdown() (to flush logs to disk) and then os._exit(-1).  you need "import logging" and "import os" 
+for this to work.
+truncate_history(n): in the next outgoing wedged message, send a truncated history by omitting the last n entries. 
+sleep(time): sleep for the specified time, in milliseconds.  this is a timing failure.
+drop(): drop (i.e., ignore) the incoming message that triggered this failure.
+increment_slot(): if this replica is the head, it immediately increments the variable in which it stores the slot number to assign to 
+the next request.  this should be done before processing the message that triggered the failure.  if this replica is not the head, this failure has no effect.
+extra_op(): this replica immediately applies the operation put('a','a') to its running state.  this should be done before processing 
+the message that triggered the failure.
+invalid_order_sig(): in the next outgoing shuttle message, this replica puts an invalid signature on its order statement.
+
+example: here is one way to create an invalid signature.
+# increment the first byte of the signature in a nacl.signing.SignedMessage.
+# modifying invalid_signed._signature is unnecessary. 
+signedlist = list(signed)
+signedlist[0] = (signedlist[0] + 1) % 256
+newsigned=bytes(signedlist)
+invalid_signed = nacl.signing.SignedMessage._from_parts(signed._signature, signed._message, newsigned)
+
+invalid_result_sig(): if this replica is not the tail, it puts an invalid signature on its result statement in the next outgoing shuttle 
+message [note: this is "shuttle message" not "result shuttle message"].  if this replica is the tail, it puts an invalid signature on 
+its result statement in the next outgoing result message to a client.
+
+drop_checkpt_stmts(): in the next outgoing completed checkpoint proof shuttle [this is the message that travels along the chain from 
+tail to head], this replica omits the checkpoint statements from the first t+1 replicas in the chain.
+
+-----
+configuration files should have the following format: each row either starts with "#", in which case it is a comment, or contains the
+name of a configuration parameter, an equals sign, and the value of that configuration parameter.  whitespace around the equals sign is optional and should be ignored.  parameters may appear in the configuration file in any order.
+
+the following example shows the names of configuration parameters supported by the  system.  
+
+# test case name.  can be used to trigger test case specific code in client,
+# e.g., to generate special request sequences or validate intermediate or
+# final values of object state.
+test_case_name = test1
+
+# number of failures to tolerate.  number of replicas is 2t+1.
+t = 1
+# number of clients
+num_client = 3
+# client timeout, in milliseconds.  if timer expires, resend request 
+# to all replicas, as described in section 3.3.
+client_timeout = 3000
+# timeout, in milliseconds, for head and non-head servers, respectively:
+# if timer expires, send reconfiguration request to Olympus, as described 
+# in section 3.3.
+head_timeout = 3000
+nonhead_timeout = 3000
+# checkpoint interval.  take a checkpoint every checkpt_interval slots.
+checkpt_interval = 10
+
+# CLIENT WORKLOAD
+workload[0] = pseudorandom(233,5)
+workload[1] = put('movie','star'); append('movie',' wars'); get('movie')
+workload[2] = put('jedi,'luke skywalker'); slice('jedi','0:4'); get('jedi')
+
+# FAILURE SCENARIO
+# failures[c,r] is the failure scenario for replica r in configuration c.
+# configurations are numbered starting with 0.  replicas are numbered by
+# position in the chain, starting from 0.  replicas without a specified
+# failure scenario are failure-free.
+failures[0,0] = client_request(2,1), crash()
+failures[1,2] = result_shuttle(0,1),drop(); shuttle(1,3),omit_send()
+
+
+------------------------------------------------------------
+LOGS
+each process should generate a comprehensive log file describing initial settings, the content of every message received, the content 
+of every message sent, and details of every significant internal action.  every log entry should contain a real-time timestamp.
+the log file should have a self-describing format, in the sense that each value is labeled with a name indicating its meaning.  
+for example, each component of a message should be labeled to indicate its meaning; do not rely on the reader to know that the first
+component of the tuple means X, the second component means Y, etc. each injected failure should be recorded in a log entry 
+containing the exact trigger,failure pair (e.g., "client_request(2,1), crash()") in the configuration file that caused the failure.
+if using DistAlgo, the log file should be produced using DistAlgo's built-in support for logging.  See the "Logging output" section
+of the DistAlgo language description (language.pdf) and the logging-related command-line options (search for "log" in the output of 
+"python -m da --help"). processes may write to individual log files or a common log file (in this case, each log entry should be 
+labeled with the process that produced it). 
+log entries related to processing of a client request should include the request's request ID and slot number.  when handling a
+retransmitted client request, the log should indicate which of the cases listed in Section 3.3 has occurred.  we recommend that, 
+at least for short test cases, replicas print the final content of their dictionary in the log before terminating. 
+
+-------------------------------------------------------------------------------------------------------------
+
+
+
+=========================================================RUNNING=======================================================================
+
 PLATFORM:
 OS: Ubuntu 16.04.2 running on VMWare
 DistAlgo version: pyDistAlgo-1.0.9, download here: https://sourceforge.net/projects/distalgo/
@@ -19,7 +171,8 @@ To check logs:
 
 
 WORKLOAD GENERATION:
-I have kept the list of requests to choose from in a list and have used Python's  random.seed() gnerator to generate an index between 0 and len(list). This generates a good mixture of requests and also allows clients to have interleaved requests.
+I have kept the list of requests to choose from in a list and have used Python's  random.seed() gnerator to generate an index 
+between 0 and len(list). This generates a good mixture of requests and also allows clients to have interleaved requests.
 
 
 BUGS AND LIMITATIONS.  have passed all supplied tests to my knowledge
@@ -35,31 +188,3 @@ myrep_classes.py - replica definition
 mycentral.py  - central client to check results when all are done
 verify_sign.py   create_hash.py   pseudo_rand.py  sign_msg.py   validate_msg.py - help in signing messages
 
-
-CODE SIZE.  
-(1a) 
----------------------------------------------------------------------------------------------
-                                  files          blank         comment           code
-----------------------------------------------------------------------------------------------
-Algorithm                          10            108            123            935 
-----------------------------------------------------------------------------------------------
-Other                               2             17             24            118
-
-SUM:                               12            125            147           1053
-----------------------------------------------------------------------------------------------
-
-algo:
-(1b)
-Cloc
-
-2:
-Core Algo:
-  files          blank         comment           code
-------------------------------------------------------
-   5              79              86             869
-
-
-
-LANGUAGE FEATURE USAGE:
-List and dictionary comprehenstions: about 63
-Distalgo aggreagations etc. were not used, although "await and new" are used  a lot
