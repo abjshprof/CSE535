@@ -1,0 +1,32 @@
+# test case name.  can be used to trigger test case specific code in client,
+# e.g., to generate special request sequences or validate intermediate or
+# final values of object state. [2017-09-12: added this item]
+test_case_name = test_case_new_failure_tr
+
+# number of failures to tolerate.  number of replicas is 2t+1.
+t = 1
+# number of clients
+num_client = 2
+# client timeout, in milliseconds.  if timer expires, resend request 
+# to all replicas, as described in section 3.3.
+client_timeout = 3000
+# timeout, in milliseconds, for head and non-head servers, respectively:
+# if timer expires, send reconfiguration request to Olympus, as described 
+# in section 3.3.
+head_timeout = 3000
+nonhead_timeout = 3000
+
+# CLIENT WORKLOAD
+#workload[0] = pseudorandom(233,5)
+workload[0] = put('movie',' wars'); put('moon','walk'); append('moon','jackson'); append('movie','skywalker'); get('yoda'); put('singer', 'taylor'); append('singer','swift')
+workload[1] = put('jedi','luke skywalker'); put('darth','dada'); put('goal','post'); append('darth','vader')
+
+# FAILURE SCENARIO
+# failures[c,r] is the failure scenario for replica r in configuration c.
+# configurations are numbered starting with 0.  replicas are numbered by
+# position in the chain, starting from 0.  replicas without a specified
+# failure scenario are failure-free.
+
+failures[0,1] = shuttle(0,3), invalid_order_sig(); shuttle(0,2), truncate_history(1)
+
+#failures[1,1] = client_request(0,1), change_result(); result_shuttle(0,1), drop_result_stmt(); forwarded_request(0,1), change_result(); wedge_request(0), sleep(2); new_configuration(2), drop();  get_running_state(3), crash(); catch_up(5), extra_op(); new_configuration(4),invalid_result_sig(); wedge_request(3), invalid_order_sig(); get_running_state(1), truncate_history(3), catch_up(5); increment_slot()

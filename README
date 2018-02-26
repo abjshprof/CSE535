@@ -1,0 +1,65 @@
+This project implements the following paper for a Byzantine tolerant replicated key-value store.
+Byzantine Chain Replication - Cornell Computer Science at www.cs.cornell.edu/~ns672/publications/2012OPODIS.pdf
+
+
+PLATFORM:
+OS: Ubuntu 16.04.2 running on VMWare
+DistAlgo version: pyDistAlgo-1.0.9, download here: https://sourceforge.net/projects/distalgo/
+Python version: Python 3.5.2
+
+INSTRUCTIONS:
+To run:
+	- create config file under config/ if not present
+	- in the above file assign to "test_case_name" the name of this filename, e.g. , test_case_name=test_case_client_timeout
+	- in parent dir, python doruns.py config/<config_filename> {The file must be under config}
+
+To check logs:
+	- cd logs/<config_filename>
+	- names are self-expalanatory
+
+
+WORKLOAD GENERATION:
+I have kept the list of requests to choose from in a list and have used Python's  random.seed() gnerator to generate an index between 0 and len(list). This generates a good mixture of requests and also allows clients to have interleaved requests.
+
+
+BUGS AND LIMITATIONS.  have passed all supplied tests to my knowledge
+
+
+CONTRIBUTIONS: Done by self, this was a one-member team.
+
+
+MAIN FILES:
+All files are named *.py , a script converts them to the correct format before running
+myOlympusdef.py - create all keys and replicas
+myrep_classes.py - replica definition
+mycentral.py  - central client to check results when all are done
+verify_sign.py   create_hash.py   pseudo_rand.py  sign_msg.py   validate_msg.py - help in signing messages
+
+
+CODE SIZE.  
+(1a) 
+---------------------------------------------------------------------------------------------
+                                  files          blank         comment           code
+----------------------------------------------------------------------------------------------
+Algorithm                          10            108            123            935 
+----------------------------------------------------------------------------------------------
+Other                               2             17             24            118
+
+SUM:                               12            125            147           1053
+----------------------------------------------------------------------------------------------
+
+algo:
+(1b)
+Cloc
+
+2:
+Core Algo:
+  files          blank         comment           code
+------------------------------------------------------
+   5              79              86             869
+
+
+
+LANGUAGE FEATURE USAGE:
+List and dictionary comprehenstions: about 63
+Distalgo aggreagations etc. were not used, although "await and new" are used  a lot

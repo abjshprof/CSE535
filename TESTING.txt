@@ -1,0 +1,91 @@
+Commands to run test_cases and check logs:
+RUNNING:
+To run:
+	- create config file under config/ if not present
+	- in the above file assign to "test_case_name" the name of this filename, e.g. , test_case_name=test_case_client_timeout
+	- in parent dir, python doruns.py config/<config_filename> {The file must be under config}
+
+To check logs:
+	- cd logs/<config_filename>
+	- names are self-expalanatory
+
+E.g.
+In file, config/test_case_stress_no_failure , test_case_name = test_case_stress_no_failure
+python doruns.py test_case_general_no_failures
+
+
+Verifying results:
+ All clients store the result they get from the replica for a given request. The replica also supplies the slot id it had assigned to this request. The idea is to compare two lists of results, the result the client expects (the result that had been if all client requests were succsessful) vs. what the service has actually applied.On completion, the clients all send their expected and obtained results to a central service which orders all request ids by their assigned slot ids and executes them. If the results differ, then there has been a failure.
+The file central_log contains the reuslts
+
+
+
+NOTE:
+ - Configuration filenames are same as the items below and can be found under config directory
+
+
+===================================================================
+
+TESTS
+To generate logs , copy the file under config and run python doruns.py filename, see RUNNING section above
+
+NEW_FAILURES:
+To view the log files in a more readable way, run ./process.sh in same dir as the logs. This removes the timestammps and other information. This is just if we want to view things easily.
+
+1. new_failures: demonstrates all failures except truncate_history and increment_slot
+Due to lack of time, I have squeezed practically all tests into above single file. Allow me to walk you though it:
+	a> On receipt of new_config_msg , replica 1 temporarily goes to sleep, this causes client to time out and resend requests. However, it soon wakes up and                 eventually request is served.
+	b> On receipt of 3rd fwd shuttle from client 0, it puts an invalid_order_sig on its outgoing shuttle, this is detected by next replica and triggers a                    reconfiguration
+	c> On receipt of wedge_request , it again goes to sleep for a little while , this has no affect as Olympus has a bigger timeout
+	d> On recipt of catch_up msg , it applies an extra_op to its state, thus its caughtup hash is rejected by the Olympus
+	e> Olympus uses the remaining replicas to build the next config, 1
+	f> In config 1, on 1st client request, head puts an invalid_result_sig in its outgoing shuttle. this again triggers reconfiguration from the client
+	g> Olympus detects this and reconfigures the system to config, 2
+	h> In config 2, replica 1 on the 1st fwd shuttle drops the msg, this again leads to a timeout
+	i> When replica 1 now gets a wedge_request from the olympus , it crashes which leads the olympus to timeout. But this is OK, as the other two replicas                   respond and are enough to build a quorum
+	j> Finally, we move to new config , 3.
+
+2. new_failures_tr: demonstrates all other failures:
+	a> replica 1 applies an invalid order sign on its outgoing shuttle
+	b> replica 1 truncates its history in the next outgoing msg.
+	c.> Olympus detects this and does not accept its hash
+
+3. new_failures_incr: demonstrates incremement slot
+	a> also replica 0 incrememnts the slot on client request 2, which is detected by replica 1 triggering a reconfig
+
+4. test_case_general_no_failures:
+This test case aims to test the general functionality like all replicas and clients are successfully able to come up,  both replicas and clients read their configuration. It injects no failures. It also contains all dictionary operations which shows the support for those operations. Also, shows successful validation of both result and order proofs on clients and replicas . Futher this also shows that tail successfully sends the result and Olympsu created public and private keys
+Here, Client simply supplies a small set of dictionary operations to the replicas and waits fot the result. On completion, it is detected that result is correct
+
+5.test_case_client_timeout
+This attempts to test the case where the client times out. Here on the 2nd client request, the head changes its result statement, this causes the validation of result proof at the next replica to fail and thus no result is sent to client leading it to timeout. On timeout, client retransmits to all replicas which handle the requests then. On completion, it is detected that result is not correct
+
+6.test_case_replica_faults
+This attempts to test the case where some of the replicas are faulty. Here replica 1 changes the operation on a fwd shuttle, thus leading to invalid order proof detection at next replicas. This leads to the client retransmiiting to all replicas. On receipt , all of them check for the result in the cache and are unable to find it which leads them to sending a forward request to head. The head also receives the retransmit request from the client and checks it cache which also fails. Since the head has seen this request before, it waits for the result to arrive. In the meantime, head also gets the forwarded requests from other replicas and ignores them if it ias already started the timer. Ultimately, head timesout again and notifies to Olympus. All other replicas do the same.
+Also the failures are desgined in such a way that all types of triggers(shuttle, result, client_req, forward_req) are triggered and all types of failures(drop_result_stmnt, get(X), change_result) are injected.
+On completion, it is detected that result is not correct
+
+7.test_case_stress_no_failure
+This test demonstrates the replicas handling large number of requests from a large number of clients. There are 10 clients that send 500 requests in total and 5 replicas. The requests are generated using a pseudo rnadome generator. Since there are no failures, the result is successfully verified at the end
+
+8. test_case_stress_with_failure
+This test is like 4. but with failures. On completion, it is detected that result is not correct.
+
+
+
+
+
+
+
+
+=============================================================
+
+
+PERFORMANCE:
+1. Raft.da : elapsed time (seconds):  13.897982358932495 
+2. Single host: elapsed time in seconds 45.27838754653931
+3. Mult-host: not supported
+
+To test Performance yourself:
+- git apply patch_for_performance
+- run

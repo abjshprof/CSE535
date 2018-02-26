@@ -1,0 +1,125 @@
+diff --git a/src/create_hash.py b/src/create_hash.py
+index 6d5fd43..7e51c66 100644
+--- a/src/create_hash.py
++++ b/src/create_hash.py
+@@ -6,14 +6,14 @@ from defs import EMsg_Hash
+ HASHER = nacl.hash.sha256
+ 
+ def create_hash_and_encode_msg(msg): #the msg is a tuple object
+-	print ("got msg", msg)
++	#print ("got msg", msg)
+ 	bstream = pickle.dumps(msg)  #we need to convert it to a byte stream first
+ 	encd_msg = nacl.encoding.HexEncoder.encode(bstream)
+ 	digest = HASHER(bstream, encoder=nacl.encoding.HexEncoder)
+ 	emsg_hash = EMsg_Hash(encd_msg, digest)
+ 	#print ("encd_msg\n", emsg_hash.encd_msg)
+ 	#print ("")
+-	print ("digest\n", emsg_hash.digest)
++	#print ("digest\n", emsg_hash.digest)
+ 	return emsg_hash
+ 	
+ 
+diff --git a/src/mycentral.py b/src/mycentral.py
+index 1d044c8..9100125 100644
+--- a/src/mycentral.py
++++ b/src/mycentral.py
+@@ -6,6 +6,7 @@ import threading
+ import sys
+ import re
+ from time import sleep
++import time
+ from read_config import parse_file
+ from read_config import get_client_load 
+ 
+@@ -99,7 +100,9 @@ class Central_Client(process):
+ ######
+ 		#return
+ #########
++		start_time = time.time()
+ 		await (num_received_dicts == num_clients)
++		end_time = time.time()
+ 		central_rep_res = {}
+ 		central_exp_res = {}
+ 		central_rep_res_list = []
+@@ -127,13 +130,14 @@ class Central_Client(process):
+ 		for key, value in central_exp_res.items():
+ 			central_exp_res_list.append(apply_operation(value))
+ 
++		print ("elapsed time in seconds",end_time - start_time)
+ 		if (central_rep_res_list == central_exp_res_list):
+ 			output("\n\n\n")
+-			output ("results are correct")
+-			output ("central_rep_res_list: ", central_rep_res_list)
+-			output ("central_exp_res_list: ", central_exp_res_list)
++			print ("results are correct", len(central_exp_res_list))
++			#output ("central_rep_res_list: ", central_rep_res_list)
++			#output ("central_exp_res_list: ", central_exp_res_list)
+ 			output ("all is well")
+ 		else:
+-			output ("Expected", central_exp_res_list)
++			print ("Expected", central_exp_res_list)
+ 			output ("But obtained", central_rep_res_list)
+ 			output ("Failure")
+diff --git a/src/myclient.py b/src/myclient.py
+index 757995d..beba9c3 100644
+--- a/src/myclient.py
++++ b/src/myclient.py
+@@ -212,7 +212,7 @@ class Client(process):
+ 							return
+ 							
+ 						#sys.exit()
+-			sleep(1)
++			#sleep(1)
+ 		output ("client ",myclient_id,  "Sending to replicas done, now sending results to central config")
+ 		send(('client_verify_res', rep_res, exp_res, myclient_id), to=central_client)
+ 		await(0)
+diff --git a/test.sh b/test.sh
+index 5066b55..b38b233 100755
+--- a/test.sh
++++ b/test.sh
+@@ -26,12 +26,12 @@ cp ./mycentral.py central_client.da
+ cp ./validate_proofs.py validate_proofs.da
+ 
+ 
+-olympus_cmd="--tab -e \"bash -c 'python3.5 -m da  -f -F output --logfilename=${LOG_DIR}/olymp_log --message-buffer-size 32768  -n Olympus olympdef.da $filename ; /bin/bash -i' ; exec \$SHELL \" "
+-central_cmd="--tab -e \"bash -c 'sleep 5; python3.5 -m da -f -F output -D --logfilename=${LOG_DIR}/central_log --message-buffer-size 32768  -n Central_client olympdef.da $filename; /bin/bash -i '  ; exec \$SHELL  \" "
++olympus_cmd="--tab -e \"bash -c 'python3.5 -m da -L usrerr  --message-buffer-size 32768  -n Olympus olympdef.da $filename ; /bin/bash -i' ; exec \$SHELL \" "
++central_cmd="--tab -e \"bash -c 'sleep 5; python3.5 -m da -L usrerr -D  --message-buffer-size 32768  -n Central_client olympdef.da $filename; /bin/bash -i '  ; exec \$SHELL  \" "
+ 
+ tab="--tab"
+ foo=""
+-cmd1="\"bash -c 'sleep 5;python3.5 -m da -f -F output -D  --logfilename=${LOG_DIR}/"
++cmd1="\"bash -c 'sleep 5;python3.5 -m da  -L usrerr -D "
+ cmd2=" --message-buffer-size 32768  -n "
+ cmd3=" $filename /bin/bash -i'   ;exec \$SHELL \""
+ counter=0
+@@ -40,7 +40,7 @@ client_fname="olympdef.da"
+ while [ $counter -lt $num_clients ]
+ do
+ 	#echo $counter
+-	log_name="client${counter}_log"
++	#log_name="client${counter}_log"
+ 	node_name="Client$counter"
+ 	sub_cmd="$cmd1$log_name$cmd2$node_name $client_fname$cmd3"
+ 	final_cmd="$final_cmd --tab -e $sub_cmd"
+@@ -54,17 +54,17 @@ rep_fname="olympdef.da"
+ while [ $counter -lt $num_replicas ]
+ do
+ 	#echo $counter
+-	log_name="rep${counter}_log"
++	#log_name="rep${counter}_log"
+ 	node_name="Replica$counter"
+ 	if (( counter == 0 ))
+ 	then
+-		log_name="head_log"
++		#log_name="head_log"
+ 		node_name="Head"	
+ 	fi
+ 	
+ 	if (( counter == $num_replicas -1 ))
+ 	then
+-		log_name="tail_log"
++		#log_name="tail_log"
+ 		node_name="Tail"	
+ 	fi
+ 

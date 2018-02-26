@@ -1,0 +1,7 @@
+
+python -m da -f -F output --logfilename=${PWD}/logs/central_client_log --message-buffer-size 32768 -D -n Central_client central_client.da
+python -m da -f -F output --logfilename=${PWD}/logs/client0_log --message-buffer-size 32768 -D -n Client0 client.da
+python -m da -f -F output --logfilename=${PWD}/logs/client1_log --message-buffer-size 32768 -D -n Client1 client.da
+python -m da -f -F output --logfilename=${PWD}/logs/head_log --message-buffer-size 32768 -D -n Head rep_classes.da
+python -m da -f -F output --logfilename=${PWD}/logs/rep1_log --message-buffer-size 32768 -D -n Replica1 rep_classes.da
+python -m da -f -F output --logfilename=${PWD}/logs/tail_log --message-buffer-size 32768 -D -n Tail rep_classes.da
